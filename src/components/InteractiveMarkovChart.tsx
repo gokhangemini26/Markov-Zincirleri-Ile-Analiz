@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { DataPoint, PositionSetup } from '@/types/markov';
-import { Eye, Layers, Maximize2, Shield, Sliders, TrendingUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Eye, Layers, Maximize2, Shield, ShieldAlert, Sliders, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface InteractiveMarkovChartProps {
   dataPoints: DataPoint[];
@@ -18,18 +18,22 @@ export default function InteractiveMarkovChart({
   currency
 }: InteractiveMarkovChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [chartMode, setChartMode] = useState<'CANDLE' | 'AREA'>('AREA');
+  
+  // Default to CANDLESTICKS as requested by user
+  const [chartMode, setChartMode] = useState<'CANDLE' | 'AREA'>('CANDLE');
   const [showEMA, setShowEMA] = useState<boolean>(true);
-  const [showLevels, setShowLevels] = useState<boolean>(true);
+  const [showLongLevels, setShowLongLevels] = useState<boolean>(true);
+  const [showShortLevels, setShowShortLevels] = useState<boolean>(true);
+  const [showRegimeGlow, setShowRegimeGlow] = useState<boolean>(true);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 900, height: 480 });
+  const [dimensions, setDimensions] = useState({ width: 900, height: 500 });
 
   useEffect(() => {
     const handleResize = () => {
       if (containerRef.current) {
         setDimensions({
           width: containerRef.current.clientWidth || 900,
-          height: 480
+          height: 500
         });
       }
     };
@@ -40,29 +44,38 @@ export default function InteractiveMarkovChart({
 
   if (!dataPoints || dataPoints.length === 0) {
     return (
-      <div className="w-full h-96 glass-panel rounded-2xl flex items-center justify-center text-slate-500 text-sm">
+      <div className="w-full h-96 glass-panel rounded-3xl flex items-center justify-center text-slate-500 text-sm">
         Grafik verisi yükleniyor...
       </div>
     );
   }
 
-  // Zoomed slice (last 120 bars for maximum clarity, or full slice)
+  // Zoomed slice for maximum visual clarity
   const displayBars = dataPoints.slice(-Math.min(150, dataPoints.length));
   const n = displayBars.length;
 
-  const minPrice = Math.min(...displayBars.map((d) => d.low)) * 0.96;
-  const maxPrice = Math.max(...displayBars.map((d) => d.high), positionSetup.longSetup.takeProfit1) * 1.04;
-  const priceRange = maxPrice - minPrice || 1;
+  const minPrice = Math.min(
+    ...displayBars.map((d) => d.low),
+    showShortLevels ? positionSetup.shortSetup.takeProfit2 : 999999,
+    showLongLevels ? positionSetup.longSetup.stopLoss : 999999
+  ) * 0.96;
 
+  const maxPrice = Math.max(
+    ...displayBars.map((d) => d.high),
+    showLongLevels ? positionSetup.longSetup.takeProfit2 : 0,
+    showShortLevels ? positionSetup.shortSetup.stopLoss : 0
+  ) * 1.04;
+
+  const priceRange = maxPrice - minPrice || 1;
   const maxVolume = Math.max(...displayBars.map((d) => d.volume)) || 1;
 
   const padLeft = 20;
-  const padRight = 75;
+  const padRight = 85;
   const padTop = 30;
-  const mainHeight = 310;
-  const volTop = 345;
-  const volHeight = 70;
-  const regimeTop = 425;
+  const mainHeight = 320;
+  const volTop = 360;
+  const volHeight = 65;
+  const regimeTop = 440;
   const regimeHeight = 25;
 
   const chartW = dimensions.width - padLeft - padRight;
@@ -101,51 +114,78 @@ export default function InteractiveMarkovChart({
   };
 
   return (
-    <section className="w-full glass-panel rounded-2xl p-4 md:p-6 shadow-2xl border border-white/10 relative overflow-hidden" ref={containerRef}>
+    <section className="w-full glass-panel rounded-3xl p-5 md:p-7 shadow-2xl border border-white/15 relative overflow-hidden" ref={containerRef}>
       {/* Chart Control Toolbar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 border-b border-white/10 pb-4 mb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-black text-white tracking-wide flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-              <span>{ticker} — İnteraktif Markov & Strateji Grafiği</span>
+          <div className="flex items-center gap-2.5">
+            <TrendingUp className="w-5 h-5 text-cyan-400" />
+            <h3 className="text-base font-black text-white tracking-wide">
+              {ticker} — İnteraktif Mum Grafiği & Strateji Seviyeleri
             </h3>
-            <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono font-bold">
-              {displayBars.length} Bar
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-mono font-bold border border-cyan-500/20">
+              {displayBars.length} Bar (Canlı)
             </span>
           </div>
-          <p className="text-xs text-slate-400">
-            Rejim Renkleri: 🟢 Boğa Rejimi | 🟡 Yatay Rejim | 🔴 Ayı Rejimi
+          <p className="text-xs text-slate-400 mt-0.5">
+            Grafik varsayılan olarak <strong className="text-cyan-300">Mum (Candlestick)</strong> modundadır. İstenildiğinde Long ve Short seviyeleri tek tıkla açılıp kapatılabilir.
           </p>
         </div>
 
-        {/* Display Toggles */}
+        {/* Display Toggles Group */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Mode Switcher */}
-          <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-800 text-xs">
-            <button
-              onClick={() => setChartMode('AREA')}
-              className={`px-3 py-1 rounded-md font-semibold transition-all ${
-                chartMode === 'AREA' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Çizgi / Alan
-            </button>
+          {/* Candle vs Area Switcher */}
+          <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800 text-xs shadow-inner">
             <button
               onClick={() => setChartMode('CANDLE')}
-              className={`px-3 py-1 rounded-md font-semibold transition-all ${
-                chartMode === 'CANDLE' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                chartMode === 'CANDLE' ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'text-slate-400 hover:text-white'
               }`}
             >
-              Mum (OHLC)
+              🕯️ Mum Grafik
+            </button>
+            <button
+              onClick={() => setChartMode('AREA')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                chartMode === 'AREA' ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              📈 Çizgi / Alan
             </button>
           </div>
 
+          {/* Long Levels Toggle Button */}
+          <button
+            onClick={() => setShowLongLevels(!showLongLevels)}
+            className={`px-3.5 py-1.5 text-xs rounded-xl border font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              showLongLevels
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md shadow-emerald-500/15'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>Long Seviyeleri</span>
+          </button>
+
+          {/* Short Levels Toggle Button */}
+          <button
+            onClick={() => setShowShortLevels(!showShortLevels)}
+            className={`px-3.5 py-1.5 text-xs rounded-xl border font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              showShortLevels
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-md shadow-rose-500/15'
+                : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+            }`}
+          >
+            <ArrowDownRight className="w-3.5 h-3.5" />
+            <span>Short Seviyeleri</span>
+          </button>
+
+          {/* EMAs Toggle Button */}
           <button
             onClick={() => setShowEMA(!showEMA)}
-            className={`px-3 py-1 text-xs rounded-lg border transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 text-xs rounded-xl border font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               showEMA
-                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
             }`}
           >
@@ -153,23 +193,24 @@ export default function InteractiveMarkovChart({
             <span>EMA 20/50/200</span>
           </button>
 
+          {/* Regime Background Glow Toggle Button */}
           <button
-            onClick={() => setShowLevels(!showLevels)}
-            className={`px-3 py-1 text-xs rounded-lg border transition-all flex items-center gap-1.5 ${
-              showLevels
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+            onClick={() => setShowRegimeGlow(!showRegimeGlow)}
+            className={`px-3 py-1.5 text-xs rounded-xl border font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              showRegimeGlow
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
                 : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
             }`}
           >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Long/Stop Seviyeleri</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Rejim Işıltısı</span>
           </button>
         </div>
       </div>
 
-      {/* Floating Active Point Tooltip */}
+      {/* Floating Active Crosshair Info Bar */}
       {activeHover && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs mb-3 font-mono">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5 p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs mb-3 font-mono">
           <div>
             <span className="text-slate-500 text-[10px] block">TARİH</span>
             <span className="text-slate-200 font-bold">{activeHover.date}</span>
@@ -181,13 +222,13 @@ export default function InteractiveMarkovChart({
             </span>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px] block">YÜKSEK / DÜŞÜK</span>
-            <span className="text-slate-300">
-              {activeHover.high.toFixed(2)} / {activeHover.low.toFixed(2)}
+            <span className="text-slate-500 text-[10px] block">AÇILIŞ / YÜKSEK / DÜŞÜK</span>
+            <span className="text-slate-300 text-[11px]">
+              {activeHover.open.toFixed(1)} / {activeHover.high.toFixed(1)} / {activeHover.low.toFixed(1)}
             </span>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px] block">EMA 20</span>
+            <span className="text-slate-500 text-[10px] block">EMA 20 DESTEK</span>
             <span className="text-sky-300">{activeHover.ema20?.toFixed(2) || '-'}</span>
           </div>
           <div>
@@ -199,14 +240,14 @@ export default function InteractiveMarkovChart({
             <span className="text-slate-300">{(activeHover.volume / 1e6).toFixed(2)}M</span>
           </div>
           <div>
-            <span className="text-slate-500 text-[10px] block">AKTİF REJİM</span>
+            <span className="text-slate-500 text-[10px] block">MARKOV DURUMU</span>
             <span
-              className={`font-bold px-1.5 py-0.5 rounded text-[10px] inline-block ${
+              className={`font-bold px-2 py-0.5 rounded text-[10px] inline-block ${
                 activeHover.regime === 'BULL'
-                  ? 'bg-emerald-500/20 text-emerald-300'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                   : activeHover.regime === 'BEAR'
-                  ? 'bg-rose-500/20 text-rose-300'
-                  : 'bg-amber-500/20 text-amber-300'
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
               }`}
             >
               {activeHover.regime === 'BULL' ? '🐂 BOĞA' : activeHover.regime === 'BEAR' ? '🐻 AYI' : '↔️ YATAY'}
@@ -225,27 +266,27 @@ export default function InteractiveMarkovChart({
           className="w-full cursor-crosshair"
         >
           <defs>
-            {/* Gradients for area chart */}
+            {/* Gradients */}
             <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
               <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
             </linearGradient>
             <linearGradient id="bullRegimeGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
               <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
             </linearGradient>
             <linearGradient id="bearRegimeGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.15" />
+              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.18" />
               <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.02" />
             </linearGradient>
             <linearGradient id="sideRegimeGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.1" />
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.12" />
               <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
             </linearGradient>
           </defs>
 
-          {/* Background Grid Lines */}
-          {[0.2, 0.4, 0.6, 0.8].map((pct) => {
+          {/* Background Horizontal Grid Lines & Price Labels */}
+          {[0.15, 0.35, 0.55, 0.75, 0.95].map((pct) => {
             const p = minPrice + priceRange * pct;
             const y = getY(p);
             return (
@@ -259,25 +300,18 @@ export default function InteractiveMarkovChart({
           })}
 
           {/* Markov Regime Background Shading Spans */}
-          {displayBars.map((d, i) => {
-            if (i === n - 1) return null;
-            const x1 = getX(i);
-            const x2 = getX(i + 1);
-            const w = Math.max(1, x2 - x1);
-            const fill =
-              d.regime === 'BULL' ? 'url(#bullRegimeGrad)' : d.regime === 'BEAR' ? 'url(#bearRegimeGrad)' : 'url(#sideRegimeGrad)';
-            return <rect key={`reg-bg-${i}`} x={x1} y={padTop} width={w} height={mainHeight} fill={fill} />;
-          })}
+          {showRegimeGlow &&
+            displayBars.map((d, i) => {
+              if (i === n - 1) return null;
+              const x1 = getX(i);
+              const x2 = getX(i + 1);
+              const w = Math.max(1, x2 - x1);
+              const fill =
+                d.regime === 'BULL' ? 'url(#bullRegimeGrad)' : d.regime === 'BEAR' ? 'url(#bearRegimeGrad)' : 'url(#sideRegimeGrad)';
+              return <rect key={`reg-bg-${i}`} x={x1} y={padTop} width={w} height={mainHeight} fill={fill} />;
+            })}
 
-          {/* Area Mode */}
-          {chartMode === 'AREA' && (
-            <>
-              <polygon points={areaPath} fill="url(#areaGradient)" />
-              <polyline points={linePoints} fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeLinejoin="round" />
-            </>
-          )}
-
-          {/* Candlestick Mode */}
+          {/* 1. Candlestick Mode (DEFAULT) */}
           {chartMode === 'CANDLE' &&
             displayBars.map((d, i) => {
               const x = getX(i);
@@ -289,29 +323,37 @@ export default function InteractiveMarkovChart({
               const yLow = getY(d.low);
               const top = Math.min(yOpen, yClose);
               const height = Math.max(2, Math.abs(yClose - yOpen));
-              const candleWidth = Math.max(2, (chartW / n) * 0.7);
+              const candleWidth = Math.max(2.5, (chartW / n) * 0.72);
 
               return (
                 <g key={`candle-${i}`}>
-                  {/* Wick */}
+                  {/* High-Low Wick */}
                   <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={candleColor} strokeWidth="1.2" />
-                  {/* Body */}
+                  {/* Candle Body */}
                   <rect x={x - candleWidth / 2} y={top} width={candleWidth} height={height} fill={candleColor} rx="1" />
                 </g>
               );
             })}
 
-          {/* Moving Averages */}
-          {showEMA && (
+          {/* 2. Area Mode (Alternative) */}
+          {chartMode === 'AREA' && (
             <>
-              <polyline points={ema20Points} fill="none" stroke="#38bdf8" strokeWidth="1.4" strokeDasharray="4 2" />
-              <polyline points={ema50Points} fill="none" stroke="#fbbf24" strokeWidth="1.5" />
-              <polyline points={ema200Points} fill="none" stroke="#c084fc" strokeWidth="1.6" />
+              <polygon points={areaPath} fill="url(#areaGradient)" />
+              <polyline points={linePoints} fill="none" stroke="#38bdf8" strokeWidth="2.2" strokeLinejoin="round" />
             </>
           )}
 
-          {/* Strategic Long / Short / Stop Overlays */}
-          {showLevels && (
+          {/* Moving Averages */}
+          {showEMA && (
+            <>
+              <polyline points={ema20Points} fill="none" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 2" />
+              <polyline points={ema50Points} fill="none" stroke="#fbbf24" strokeWidth="1.5" />
+              <polyline points={ema200Points} fill="none" stroke="#c084fc" strokeWidth="1.7" />
+            </>
+          )}
+
+          {/* Long Strategic Overlays */}
+          {showLongLevels && (
             <>
               {/* Long TP1 */}
               <line
@@ -320,18 +362,39 @@ export default function InteractiveMarkovChart({
                 x2={dimensions.width - padRight}
                 y2={getY(positionSetup.longSetup.takeProfit1)}
                 stroke="#10b981"
-                strokeWidth="1.2"
-                strokeDasharray="4 4"
+                strokeWidth="1.3"
+                strokeDasharray="4 3"
               />
               <text
-                x={dimensions.width - padRight + 6}
+                x={dimensions.width - padRight + 4}
                 y={getY(positionSetup.longSetup.takeProfit1) + 3}
                 fill="#10b981"
                 fontSize="9"
                 fontWeight="bold"
                 fontFamily="monospace"
               >
-                TP1: {positionSetup.longSetup.takeProfit1}
+                LONG TP1: {positionSetup.longSetup.takeProfit1}
+              </text>
+
+              {/* Long Entry Trigger */}
+              <line
+                x1={padLeft}
+                y1={getY(positionSetup.longSetup.entryTrigger)}
+                x2={dimensions.width - padRight}
+                y2={getY(positionSetup.longSetup.entryTrigger)}
+                stroke="#38bdf8"
+                strokeWidth="1.3"
+                strokeDasharray="6 3"
+              />
+              <text
+                x={dimensions.width - padRight + 4}
+                y={getY(positionSetup.longSetup.entryTrigger) + 3}
+                fill="#38bdf8"
+                fontSize="9"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                LONG GİRİŞ: {positionSetup.longSetup.entryTrigger}
               </text>
 
               {/* Long Stop */}
@@ -341,18 +404,86 @@ export default function InteractiveMarkovChart({
                 x2={dimensions.width - padRight}
                 y2={getY(positionSetup.longSetup.stopLoss)}
                 stroke="#f43f5e"
-                strokeWidth="1.4"
-                strokeDasharray="6 3"
+                strokeWidth="1.5"
+                strokeDasharray="5 3"
               />
               <text
-                x={dimensions.width - padRight + 6}
+                x={dimensions.width - padRight + 4}
                 y={getY(positionSetup.longSetup.stopLoss) + 3}
                 fill="#f87171"
                 fontSize="9"
                 fontWeight="bold"
                 fontFamily="monospace"
               >
-                STOP: {positionSetup.longSetup.stopLoss}
+                LONG STOP: {positionSetup.longSetup.stopLoss}
+              </text>
+            </>
+          )}
+
+          {/* Short Strategic Overlays */}
+          {showShortLevels && (
+            <>
+              {/* Short Stop Loss */}
+              <line
+                x1={padLeft}
+                y1={getY(positionSetup.shortSetup.stopLoss)}
+                x2={dimensions.width - padRight}
+                y2={getY(positionSetup.shortSetup.stopLoss)}
+                stroke="#f43f5e"
+                strokeWidth="1.5"
+                strokeDasharray="8 4"
+              />
+              <text
+                x={dimensions.width - padRight + 4}
+                y={getY(positionSetup.shortSetup.stopLoss) - 4}
+                fill="#f43f5e"
+                fontSize="9"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                SHORT STOP: {positionSetup.shortSetup.stopLoss}
+              </text>
+
+              {/* Short Entry Trigger */}
+              <line
+                x1={padLeft}
+                y1={getY(positionSetup.shortSetup.entryTrigger)}
+                x2={dimensions.width - padRight}
+                y2={getY(positionSetup.shortSetup.entryTrigger)}
+                stroke="#fb923c"
+                strokeWidth="1.3"
+                strokeDasharray="6 3"
+              />
+              <text
+                x={dimensions.width - padRight + 4}
+                y={getY(positionSetup.shortSetup.entryTrigger) + 3}
+                fill="#fb923c"
+                fontSize="9"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                SHORT GİRİŞ: {positionSetup.shortSetup.entryTrigger}
+              </text>
+
+              {/* Short TP1 */}
+              <line
+                x1={padLeft}
+                y1={getY(positionSetup.shortSetup.takeProfit1)}
+                x2={dimensions.width - padRight}
+                y2={getY(positionSetup.shortSetup.takeProfit1)}
+                stroke="#38bdf8"
+                strokeWidth="1.3"
+                strokeDasharray="4 3"
+              />
+              <text
+                x={dimensions.width - padRight + 4}
+                y={getY(positionSetup.shortSetup.takeProfit1) + 3}
+                fill="#38bdf8"
+                fontSize="9"
+                fontWeight="bold"
+                fontFamily="monospace"
+              >
+                SHORT TP1: {positionSetup.shortSetup.takeProfit1}
               </text>
             </>
           )}
@@ -364,7 +495,7 @@ export default function InteractiveMarkovChart({
             const y = getVolY(d.volume);
             const h = Math.max(1, volTop + volHeight - y);
             const isUp = i === 0 ? true : d.close >= displayBars[i - 1].close;
-            const barW = Math.max(1.5, (chartW / n) * 0.65);
+            const barW = Math.max(1.5, (chartW / n) * 0.68);
             return (
               <rect
                 key={`vol-${i}`}
